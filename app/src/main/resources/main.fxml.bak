@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox alignment="CENTER" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="627.0" prefWidth="841.0" style="-fx-background-color: #2b2b2b; -fx-text-fill: white;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MainController">
+   <children>
+      <AnchorPane prefHeight="652.0" prefWidth="866.0">
+         <children>
+            <TabPane layoutX="7.0" layoutY="11.0" prefHeight="641.0" prefWidth="841.0" tabClosingPolicy="UNAVAILABLE">
+              <tabs>
+                  <Tab text="启动">
+                     <content>
+                        <AnchorPane maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" minWidth="-Infinity" prefHeight="309.0" prefWidth="600.0">
+                           <children>
+                              <Label layoutX="36.0" layoutY="38.0" prefHeight="96.0" prefWidth="207.0" style="-fx-text-fill: white;" text="离线模式">
+                                 <font>
+                                    <Font size="49.0" />
+                                 </font>
+                              </Label>
+                              <TextField layoutX="48.0" layoutY="175.0" prefHeight="36.0" prefWidth="183.0">
+                                 <font>
+                                    <Font size="13.0" />
+                                 </font>
+                              </TextField>
+                              <Button layoutX="36.0" layoutY="253.0" mnemonicParsing="false" prefHeight="53.0" prefWidth="207.0" text="启动">
+                                 <font>
+                                    <Font size="27.0" />
+                                 </font>
+                              </Button>
+                           </children>
+                        </AnchorPane>
+                     </content>
+                  </Tab>
+                <Tab text="下载">
+                     <content>
+                        <AnchorPane prefHeight="200.0" prefWidth="200.0">
+                           <children>
+                              <Label fx:id="chooseLabel" layoutX="-1.0" layoutY="562.0" prefHeight="54.0" prefWidth="819.0" text="选择" textFill="WHITE">
+                                 <font>
+                                    <Font size="16.0" />
+                                 </font>
+                              </Label>
+                              <VBox prefHeight="549.0" prefWidth="152.0">
+                                 <children>
+                                    <Button fx:id="ace" mnemonicParsing="false" prefHeight="44.0" prefWidth="149.0" text="原版游戏">
+                                       <font>
+                                          <Font size="26.0" />
+                                       </font>
+                                    </Button>
+                                    <Label text="社区资源" textFill="#ffffffb2">
+                                       <font>
+                                          <Font size="22.0" />
+                                       </font>
+                                    </Label>
+                                    <Button fx:id="mod" mnemonicParsing="false" prefHeight="36.0" prefWidth="149.0" text="模组">
+                                       <font>
+                                          <Font size="26.0" />
+                                       </font>
+                                    </Button>
+                                    <Label prefHeight="16.0" prefWidth="148.0" text="Label" />
+                                    <Button fx:id="prok" layoutX="10.0" layoutY="91.0" mnemonicParsing="false" prefHeight="36.0" prefWidth="149.0" text="整合包">
+                                       <font>
+                                          <Font size="26.0" />
+                                       </font>
+                                    </Button>
+                                    <Label prefHeight="16.0" prefWidth="148.0" text="Label" />
+                                    <Button fx:id="zyb" mnemonicParsing="false" prefHeight="36.0" prefWidth="149.0" text="资源包">
+                                       <font>
+                                          <Font size="26.0" />
+                                       </font>
+                                    </Button>
+                                    <Label prefHeight="16.0" prefWidth="148.0" text="Label" />
+                                    <Button fx:id="gyb" mnemonicParsing="false" prefHeight="36.0" prefWidth="149.0" text="光影包">
+                                       <font>
+                                          <Font size="26.0" />
+                                       </font>
+                                    </Button>
+                                 </children>
+                              </VBox>
+                           </children>
+                        </AnchorPane>
+                     </content>
+                  </Tab>
+              </tabs>
+            </TabPane>
+         </children>
+      </AnchorPane>
+   </children>
+</VBox>

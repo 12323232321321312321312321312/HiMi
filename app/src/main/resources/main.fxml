@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox prefHeight="627.0" prefWidth="841.0" style="-fx-background-color: #2b2b2b;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.MainController">
+   <children>
+      <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS" style="-fx-background-color: #2b2b2b;">
+        <tabs>
+            
+            <!-- ==================== 启动 标签页 ==================== -->
+            <Tab text="启动">
+               <content>
+                  <VBox alignment="CENTER" spacing="30.0" style="-fx-background-color: #2b2b2b;">
+                     <children>
+                        <AnchorPane prefHeight="659.0" prefWidth="841.0">
+                           <children>
+                              <Button fx:id="start_game" layoutX="32.0" layoutY="249.0" mnemonicParsing="false" prefHeight="50.0" prefWidth="200.0" style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 20px; -fx-cursor: hand;" text="启 动" />
+                              <Label layoutX="32.0" layoutY="74.0" text="离线模式" textFill="WHITE">
+                                 <font><Font size="49.0" /></font>
+                              </Label>
+                              <TextField fx:id="name" layoutX="23.0" layoutY="171.0" maxWidth="300.0" prefHeight="40.0" promptText="输入你的游戏ID">
+                                 <font><Font size="16.0" /></font>
+                              </TextField>
+                              
+                              <Button fx:id="choose" layoutX="32.0" layoutY="323.0" mnemonicParsing="false" onAction="#selectVersion" prefHeight="50.0" prefWidth="200.0" style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 20px; -fx-cursor: hand;" text="选择 版本" />
+                              
+                              <Button fx:id="Setting" layoutX="32.0" layoutY="397.0" mnemonicParsing="false" prefHeight="50.0" prefWidth="200.0" style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 20px; -fx-cursor: hand;" text="版本 设置" />
+                           </children>
+                        </AnchorPane>
+                     </children>
+                  </VBox>
+               </content>
+            </Tab>
+            
+            <!-- ==================== 下载 标签页 ==================== -->
+            <Tab text="下载">
+               <content>
+                  <AnchorPane style="-fx-background-color: #2b2b2b;">
+                     <children>
+                        
+                        <VBox prefHeight="569.0" prefWidth="150.0" style="-fx-background-color: #333333;" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.topAnchor="0.0">
+                           <padding><Insets bottom="10.0" left="5.0" right="5.0" top="10.0" /></padding>
+                           <children>
+                              <Button fx:id="ace" maxWidth="1.7976931348623157E308" mnemonicParsing="false" prefHeight="44.0" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 18px; -fx-alignment: CENTER_LEFT;" text="  原版游戏" />
+                              <Label text="社区资源" textFill="#888888">
+                                 <font><Font size="14.0" /></font>
+                                 <VBox.margin><Insets bottom="5.0" left="10.0" top="10.0" /></VBox.margin>
+                              </Label>
+                              <Button fx:id="mod" maxWidth="1.7976931348623157E308" mnemonicParsing="false" prefHeight="36.0" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 16px; -fx-alignment: CENTER_LEFT;" text="  模组" />
+                              <Button fx:id="prok" maxWidth="1.7976931348623157E308" mnemonicParsing="false" prefHeight="36.0" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 16px; -fx-alignment: CENTER_LEFT;" text="  整合包" />
+                              <Button fx:id="zyb" maxWidth="1.7976931348623157E308" mnemonicParsing="false" prefHeight="36.0" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 16px; -fx-alignment: CENTER_LEFT;" text="  资源包" />
+                              <Button fx:id="gyb" maxWidth="1.7976931348623157E308" mnemonicParsing="false" prefHeight="36.0" style="-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 16px; -fx-alignment: CENTER_LEFT;" text="  光影包" />
+                           </children>
+                        </VBox>
+                        
+                        <Label fx:id="chooseLabel" text="状态: " textFill="WHITE" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="160.0" AnchorPane.rightAnchor="10.0">
+                           <font><Font size="16.0" /></font>
+                        </Label>
+
+                        <VBox spacing="10.0" AnchorPane.bottomAnchor="30.0" AnchorPane.leftAnchor="160.0" AnchorPane.rightAnchor="10.0" AnchorPane.topAnchor="10.0">
+                           <children>
+                              <!-- 彻底去白底的核心 CSS -->
+                              <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" 
+                                          style="-fx-background: #2b2b2b; -fx-background-color: #2b2b2b; -fx-control-inner-background: #2b2b2b; -fx-border-color: transparent; -fx-padding: 0;">
+                                  <content>
+                                      <!-- 内部容器也要保持深色 -->
+                                      <VBox fx:id="categoryContainer" spacing="15.0" style="-fx-background-color: #2b2b2b;">
+                                          <padding><Insets right="10.0" /></padding>
+                                      </VBox>
+                                  </content>
+                              </ScrollPane>
+                           </children>
+                        </VBox>
+                        
+                     </children>
+                  </AnchorPane>
+               </content>
+            </Tab>
+        </tabs>
+      </TabPane>
+   </children>
+</VBox>
