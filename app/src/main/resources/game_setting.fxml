@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<VBox maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="460.0" prefWidth="600.0" style="-fx-background-color: black;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.GameSettingController">
+   <children>
+      <TabPane prefHeight="460.0" prefWidth="600.0" tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+        <tabs>
+          <Tab text="版本设置">
+               <content>
+                  <AnchorPane prefHeight="400.0" prefWidth="580.0">
+                     <children>
+                        <AnchorPane layoutX="32.0" layoutY="3.0" prefHeight="87.0" prefWidth="516.0" style="-fx-background-color: white; -fx-background-radius: 15px;">
+                           <children>
+                              <ImageView fitHeight="73.0" fitWidth="133.0" layoutX="14.0" layoutY="7.0" pickOnBounds="true" preserveRatio="true">
+                                 <image>
+                                    <Image url="@img/download_img.png" />
+                                 </image>
+                              </ImageView>
+                              <Label layoutX="87.0" layoutY="4.0" prefHeight="27.0" prefWidth="425.0" text="设置名称: ">
+                                 <font>
+                                    <Font size="20.0" />
+                                 </font>
+                              </Label>
+                              <TextField fx:id="txtVersionName" layoutX="97.0" layoutY="32.0" prefHeight="26.0" prefWidth="400.0" />
+                              <Button fx:id="btnConfirmName" layoutX="97.0" layoutY="62.0" mnemonicParsing="false" prefHeight="23.0" prefWidth="400.0" text="确定" />
+                           </children>
+                        </AnchorPane>
+                     </children>
+                  </AnchorPane>
+               </content>
+            </Tab>
+          <Tab text="启动设置">
+               <content>
+                  <AnchorPane prefHeight="400.0" prefWidth="580.0">
+                     <children>
+                        <!-- 内存设置区域 -->
+                        <AnchorPane layoutX="22.0" layoutY="3.0" prefHeight="118.0" prefWidth="536.0" style="-fx-background-color: white; -fx-background-radius: 15px;">
+                           <children>
+                              <Label fx:id="lblMemoryInfo" layoutX="14.0" layoutY="5.0" prefHeight="20.0" prefWidth="400.0" text="内存分配: 4096 MB">
+                                 <font>
+                                    <Font size="23.0" />
+                                 </font>
+                              </Label>
+                              <Slider fx:id="memorySlider" blockIncrement="1024.0" layoutX="14.0" layoutY="45.0" max="16384.0" min="1024.0" prefHeight="30.0" prefWidth="508.0" showTickLabels="false" showTickMarks="true" value="4096.0" />
+                           </children>
+                        </AnchorPane>
+
+                        <!-- Java 设置区域 -->
+                        <AnchorPane layoutX="21.0" layoutY="127.0" prefHeight="119.0" prefWidth="536.0" style="-fx-background-color: white; -fx-background-radius: 15px;">
+                           <children>
+                              <Label layoutX="14.0" layoutY="4.0" text="Java 路径: ">
+                                 <font>
+                                    <Font size="22.0" />
+                                 </font>
+                              </Label>
+                              <HBox layoutX="14.0" layoutY="40.0" prefHeight="30.0" prefWidth="508.0" spacing="10.0">
+                                  <children>
+                                      <ComboBox fx:id="javaPathComboBox" editable="true" prefHeight="30.0" prefWidth="420.0" promptText="请输入或选择 java.exe 的绝对路径" HBox.hgrow="ALWAYS" />
+                                      <Button fx:id="btnBrowseJava" prefHeight="30.0" text="浏览..." />
+                                  </children>
+                              </HBox>
+                              <Button fx:id="SaveJavaSettings" layoutX="14.0" layoutY="76.0" mnemonicParsing="false" prefHeight="29.0" prefWidth="508.0" text="保存java设置" />
+                           </children>
+                        </AnchorPane>
+                     </children>
+                  </AnchorPane>
+               </content>
+            </Tab>
+        </tabs>
+      </TabPane>
+   </children>
+</VBox>

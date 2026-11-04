@@ -5,35 +5,37 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import org.example.config.ConfigManager;
 
-import java.io.IOException;
+import java.util.Map;
 
 public class App extends Application {
 
     @Override
+    @SuppressWarnings("unchecked")
     public void start(Stage primaryStage) throws Exception {
-        // 1. 检查路径是否真的找到了文件
-        var fxmlUrl = getClass().getResource("/main.fxml");
-        System.out.println("加载的 FXML 路径: " + fxmlUrl);
-
-        if (fxmlUrl == null) {
-            System.out.println("未找到 main.fxml 文件！请检查路径。");
-            return;
-        }
-
-        Parent root = FXMLLoader.load(fxmlUrl);
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("/main.fxml"));
+        Parent root = loader.load();
         
-        // 2. 检查根节点是什么，有没有子节点
-        System.out.println("根节点类型: " + root.getClass().getSimpleName());
+        MainController controller = loader.getController();
         
-        // 3. 强制设置一个足够大的宽高
-        Scene scene = new Scene(root, 841, 627); 
-
-        primaryStage.setTitle("我的 MC 启动器 v0.1 (FXML版)");
+        Scene scene = new Scene(root, 841, 627);
+        primaryStage.setTitle("我的 MC 启动器 v0.1");
         primaryStage.setScene(scene);
-        primaryStage.show();
         
-        System.out.println("窗口已显示！");
+        // 🚨 关窗时：只保存当前输入的名字和选中的版本，绝不覆盖 javaPath 和 memory
+        primaryStage.setOnCloseRequest(event -> {
+            System.out.println("正在保存玩家配置...");
+            String currentPlayerId = controller.getNameFieldValue();
+            String currentVersion = controller.getSelectedVersion();
+            
+            Map<String, Object> setup = ConfigManager.loadSetup();
+            setup.put("playerId", currentPlayerId);
+            setup.put("selectedVersion", currentVersion);
+            ConfigManager.saveFullSetup(setup);
+        });
+        
+        primaryStage.show();
     }
 
     public static void main(String[] args) {

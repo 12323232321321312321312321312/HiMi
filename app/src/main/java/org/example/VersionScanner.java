@@ -32,10 +32,15 @@ public class VersionScanner {
                     
                     String type = "原版";
                     if (root.has("inheritsFrom")) {
-                        if (folderName.toLowerCase().contains("fabric")) {
+                        String lowerName = folderName.toLowerCase();
+                        if (lowerName.contains("fabric")) {
                             type = "Fabric";
-                        } else if (folderName.toLowerCase().contains("forge")) {
+                        } else if (lowerName.contains("neoforge")) {
+                            type = "NeoForge";
+                        } else if (lowerName.contains("forge")) {
                             type = "Forge";
+                        } else if (lowerName.contains("optifine")) {
+                            type = "OptiFine";
                         } else {
                             type = "模组端";
                         }

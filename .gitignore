@@ -3,3 +3,9 @@
 
 # Ignore Gradle build output directory
 build
+
+absc.ps1
+
+temp-installer.jar.log
+
+.minecraft

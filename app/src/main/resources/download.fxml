@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<HBox maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0" prefWidth="600.0" style="-fx-background-color: black;" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.example.DownloadController">
+   <children>
+      <!-- 左侧：总进度概览 -->
+      <VBox prefHeight="400.0" prefWidth="193.0" style="-fx-background-color: #333333;">
+         <children>
+            <Label prefHeight="57.0" prefWidth="182.0" text="       下载速度: " textFill="WHITE">
+               <font><Font size="22.0" /></font>
+            </Label>
+            <!-- 总进度条 -->
+            <ProgressBar fx:id="totalProgressBar" prefHeight="8.0" prefWidth="182.0" progress="0.0" style="-fx-accent: #4CAF50;" />
+            <Label fx:id="Download_Speed" prefHeight="44.0" prefWidth="182.0" text="     0 KB/s" textFill="#fffafa">
+               <font><Font size="20.0" /></font>
+            </Label>
+            
+            <Label prefHeight="61.0" prefWidth="182.0" text="       下载进度: " textFill="WHITE">
+               <font><Font size="22.0" /></font>
+            </Label>
+            <ProgressBar fx:id="fileProgressBar" prefHeight="8.0" prefWidth="182.0" progress="0.0" style="-fx-accent: #2196F3;" />
+            <Label fx:id="Download_Percent" prefHeight="44.0" prefWidth="182.0" text="     0%" textFill="WHITE">
+               <font><Font size="20.0" /></font>
+            </Label>
+            
+            <Label prefHeight="57.0" prefWidth="182.0" text="       剩余文件: " textFill="WHITE">
+               <font><Font size="22.0" /></font>
+            </Label>
+            <Label fx:id="Remaining_Files" prefHeight="58.0" prefWidth="182.0" text="     0 个" textFill="WHITE">
+               <font><Font size="20.0" /></font>
+            </Label>
+         </children>
+      </VBox>
+      
+      <!-- 右侧：下载任务列表 -->
+      <VBox maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="400.0" prefWidth="408.0" style="-fx-background-color: #222222;">
+         <children>
+            <!-- 使用 ListView 来显示任务列表，完美仿 PCL 的滚动体验 -->
+            <ListView fx:id="taskListView" prefHeight="400.0" prefWidth="408.0" style="-fx-background-color: #222222; -fx-control-inner-background: #222222; -fx-text-fill: white;" />
+         </children>
+      </VBox>
+   </children>
+</HBox>
