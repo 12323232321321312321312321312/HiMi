@@ -11,7 +11,11 @@ import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.SVGPath;
+import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import okhttp3.OkHttpClient;
@@ -19,27 +23,37 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.example.config.ConfigManager;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class MainController {
 
     @FXML private Label chooseLabel;
     @FXML private Button ace;
+    @FXML private Button reloadVersionsBtn;
     @FXML private VBox categoryContainer;
     @FXML private Button Setting;
-    
-    @FXML private TextField name; 
-    @FXML private Button start_game; 
+
+    @FXML private TextField name;
+    @FXML private Button start_game;
     @FXML private Label lblSelectedVersion;
     @FXML private Button choose;
     @FXML private CheckBox chkGlobalIsolation;
@@ -54,17 +68,18 @@ public class MainController {
     private JsonArray onlineVersionsCache = null;
     private List<MinecraftVersion> localVersions = new ArrayList<>();
     private String selectedVersionId = "未选择";
-    private int maxMemory = 4096; 
+    private int maxMemory = 4096;
     private boolean globalIsolateVersion = true;
 
-    // 🚨 定时器：定期检查版本列表更新
+    // 定时器：定期检查版本列表更新
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r);
         t.setDaemon(true);
+        t.setName("VersionCheckScheduler");
         return t;
     });
 
-    // 🚨 独立保存定时器：用于防抖合并配置保存
+    // 独立保存定时器：用于防抖合并配置保存
     private final ScheduledExecutorService saveScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r);
         t.setDaemon(true);
@@ -73,28 +88,31 @@ public class MainController {
     });
     private ScheduledFuture<?> pendingSaveTask = null;
 
+    // ============================================================
+    // 🚨 初始化
+    // ============================================================
     @FXML
     public void initialize() {
         ConfigManager.init();
-        
+
         Map<String, Object> setup = ConfigManager.loadSetup();
-        
+
         // ---------- 读取初始配置 ----------
         if (setup.get("playerId") != null && name != null) {
             name.setText((String) setup.get("playerId"));
         }
-        
+
         if (setup.get("memory") != null) {
             maxMemory = ((Number) setup.get("memory")).intValue();
         }
-        
+
         if (setup.get("isolateVersion") != null) {
             globalIsolateVersion = (Boolean) setup.get("isolateVersion");
         } else {
             ConfigManager.updateSingleConfig("isolateVersion", true);
             globalIsolateVersion = true;
         }
-        
+
         if (setup.get("selectedVersion") != null) {
             selectedVersionId = (String) setup.get("selectedVersion");
             if (chooseLabel != null) {
@@ -112,25 +130,23 @@ public class MainController {
         localVersions = VersionScanner.scan(ConfigManager.DEFAULT_MC_DIR);
 
         // ---------- 🚨 注册所有"配置变化点"的自动保存监听器 ----------
-        
+
         // 1. 玩家名称实时监听（防抖后自动保存）
         if (name != null) {
             name.textProperty().addListener((obs, oldVal, newVal) -> {
                 scheduleConfigSave();
             });
-            // 回车时立即保存（不等防抖）
             name.setOnAction(e -> {
                 forceSaveConfigNow();
                 chooseLabel.setText("状态: 玩家名称已保存");
             });
-            // 失焦时立即保存
             name.focusedProperty().addListener((obs, oldVal, newVal) -> {
                 if (!newVal) {
                     forceSaveConfigNow();
                 }
             });
         }
-        
+
         // 2. 版本隔离复选框监听
         if (chkGlobalIsolation != null) {
             chkGlobalIsolation.setSelected(globalIsolateVersion);
@@ -142,23 +158,43 @@ public class MainController {
         }
 
         // ---------- 按钮绑定 ----------
-        
+
         if (ace != null) {
             ace.setOnAction(event -> {
                 chooseLabel.setText("状态: 原版游戏");
                 loadOnlineVersions();
             });
         }
-        
+
+        // 初始化重新加载按钮：应用 PCL 同款 SVG 图标及事件
+        if (reloadVersionsBtn != null) {
+            SVGPath refreshIcon = new SVGPath();
+            refreshIcon.setContent("M512.0 838.3c-80.2 0-153.4-29.3-210.2-77.4l75.5-75.5c11.5-11.5 25.8-22.0 25.8-37.0a27.2 27.2 0 0 0-27.1-27.1H104.0c-27.1 0-27.1 23.9-27.1 27.1v271.9a27.1 27.1 0 0 0 27.1 27.1c15.0 0 27.8-16.6 42.5-31.2l77.9-77.9c76.6 67.7 177.1 108.9 287.4 108.9 221.7 0 404.5-166.0 431.2-380.6h-109.8c-25.9 154.2-159.7 271.9-321.3 271.9zM919.9 76.6c-15.0 0-27.8 16.6-42.5 31.3L799.5 185.8c-76.5-67.7-177.1-108.9-287.4-108.9-221.8 0-404.5 166.1-431.3 380.6H190.6c25.9-154.2 159.7-271.9 321.4-271.9 80.2 0 153.4 29.3 210.1 77.4l-75.5 75.5c-11.6 11.5-25.8 22.0-25.8 37.1a27.2 27.2 0 0 0 27.1 27.1h271.9c27.1 0 27.1-23.9 27.1-27.1V103.8a27.1 27.1 0 0 0-27.1-27.1z");
+            refreshIcon.setFill(Color.WHITE);
+            refreshIcon.setScaleX(0.018);
+            refreshIcon.setScaleY(0.018);
+
+            StackPane iconWrapper = new StackPane(refreshIcon);
+            iconWrapper.setPrefSize(30, 30);
+            reloadVersionsBtn.setGraphic(iconWrapper);
+            reloadVersionsBtn.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+
+            reloadVersionsBtn.setOnAction(e -> {
+                chooseLabel.setText("状态: 正在重新加载版本列表...");
+                localVersions = VersionScanner.scan(ConfigManager.DEFAULT_MC_DIR);
+                loadOnlineVersions();
+            });
+        }
+
         if (Setting != null) {
             Setting.setOnAction(e -> openGameSettings());
         }
-        
+
         if (start_game != null) {
             start_game.setOnAction(e -> {
-                String playerId = name.getText(); 
-                
-                // 🚨 启动前强制保存一次，作为兜底
+                String playerId = name.getText();
+
+                // 启动前强制保存一次，作为兜底
                 forceSaveConfigNow();
 
                 if (selectedVersionId == null || selectedVersionId.equals("未选择")) {
@@ -177,23 +213,31 @@ public class MainController {
                             chooseLabel.setText("状态: 游戏已启动！");
                             start_game.setDisable(false);
                         });
+                    } catch (GameLaunchException gle) {
+                        // 🚨 崩溃分析结果弹窗
+                        Platform.runLater(() -> {
+                            showCrashReportDialog(gle);
+                            chooseLabel.setText("状态: 游戏崩溃（分析已展示）");
+                            start_game.setDisable(false);
+                        });
                     } catch (Exception ex) {
                         ex.printStackTrace();
                         Platform.runLater(() -> {
+                            // 🚨 详细报错弹窗
                             Alert alert = new Alert(Alert.AlertType.ERROR);
                             alert.setTitle("启动失败");
                             alert.setHeaderText("无法启动游戏: " + ex.getMessage());
-                            
+
                             StringWriter sw = new StringWriter();
                             PrintWriter pw = new PrintWriter(sw);
                             ex.printStackTrace(pw);
                             TextArea textArea = new TextArea(sw.toString());
                             textArea.setEditable(false);
                             textArea.setWrapText(true);
-                            
+
                             alert.getDialogPane().setExpandableContent(new ScrollPane(textArea));
                             alert.show();
-                            
+
                             chooseLabel.setText("状态: 启动失败");
                             start_game.setDisable(false);
                         });
@@ -204,7 +248,7 @@ public class MainController {
 
         // ---------- 🚨 首次加载在线版本（不触发保存） ----------
         loadOnlineVersions();
-        
+
         // 每 30 分钟检查更新（不触发保存）
         scheduler.scheduleAtFixedRate(this::checkForUpdates, 1, 30, TimeUnit.MINUTES);
     }
@@ -241,47 +285,153 @@ public class MainController {
     private void doSaveConfig() {
         try {
             Map<String, Object> setup = ConfigManager.loadSetup();
-            
-            // 玩家名称
+
             if (name != null) {
                 String playerId = name.getText().trim();
                 if (!playerId.isEmpty()) {
                     setup.put("playerId", playerId);
                 }
             }
-            
-            // 已选版本
+
             setup.put("selectedVersion", selectedVersionId);
-            
-            // 版本隔离
+
             if (chkGlobalIsolation != null) {
                 setup.put("isolateVersion", chkGlobalIsolation.isSelected());
                 globalIsolateVersion = chkGlobalIsolation.isSelected();
             }
-            
-            // 内存（如果游戏设置窗口改过，这里从内存变量同步，避免被 UI 未更新覆盖）
+
             setup.put("memory", maxMemory);
-            
+
             ConfigManager.saveFullSetup(setup);
-            System.out.println("[Config] 配置已自动保存");
         } catch (Exception e) {
             System.err.println("[Config] 保存配置失败: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
     // ============================================================
-    // 以下方法与上一版保持一致（不涉及配置保存）
+    // 🚨 崩溃报告弹窗 + 导出错误报告
+    // ============================================================
+    private void showCrashReportDialog(GameLaunchException gle) {
+        CrashAnalyzer.CrashReport report = gle.getReport();
+
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("游戏崩溃了");
+        alert.setHeaderText("😢 HiMi 检测到游戏异常退出\n" +
+                "退出码: " + gle.getExitCode() + " · 版本: " + gle.getVersionId());
+
+        StringBuilder content = new StringBuilder();
+        for (String reason : report.reasons) {
+            content.append(reason).append("\n\n");
+        }
+        alert.setContentText(content.toString().trim());
+
+        // 详细日志（可展开）
+        TextArea textArea = new TextArea(report.detailLog.isEmpty() ? "（未捕获到详细日志）" : report.detailLog);
+        textArea.setEditable(false);
+        textArea.setWrapText(true);
+        textArea.setPrefRowCount(25);
+        textArea.setPrefColumnCount(100);
+        alert.getDialogPane().setExpandableContent(new ScrollPane(textArea));
+
+        // 自定义按钮：导出错误报告
+        ButtonType btnExport = new ButtonType("导出错误报告", ButtonBar.ButtonData.LEFT);
+        alert.getButtonTypes().add(0, btnExport);
+
+        Optional<ButtonType> result = alert.showAndWait();
+        if (result.isPresent() && result.get() == btnExport) {
+            exportCrashReport(gle);
+        }
+    }
+
+    private void exportCrashReport(GameLaunchException gle) {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("导出错误报告");
+        fc.setInitialFileName("HiMi-Crash-" + new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date()) + ".zip");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Zip 文件", "*.zip"));
+        File file = fc.showSaveDialog(null);
+        if (file == null) return;
+
+        CrashAnalyzer.CrashReport report = gle.getReport();
+        String baseDir = gle.getBaseDir();
+        String versionId = gle.getVersionId();
+
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(file))) {
+            // 1. 分析结果
+            zos.putNextEntry(new ZipEntry("HiMi-分析结果.txt"));
+            zos.write(String.join("\n\n", report.reasons).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zos.closeEntry();
+
+            // 2. 系统信息
+            zos.putNextEntry(new ZipEntry("系统信息.txt"));
+            String sysInfo = "系统: " + System.getProperty("os.name") + " " + System.getProperty("os.version") + "\n"
+                    + "架构: " + System.getProperty("os.arch") + "\n"
+                    + "Java 版本: " + System.getProperty("java.version") + "\n"
+                    + "Java 供应商: " + System.getProperty("java.vendor") + "\n"
+                    + "Java 路径: " + System.getProperty("java.home") + "\n"
+                    + "启动器: HiMi 1.0\n"
+                    + "游戏版本: " + versionId + "\n"
+                    + "退出码: " + gle.getExitCode() + "\n";
+            zos.write(sysInfo.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zos.closeEntry();
+
+            // 3. 详细日志
+            zos.putNextEntry(new ZipEntry("完整日志.txt"));
+            zos.write(report.detailLog.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zos.closeEntry();
+
+            // 4. 附带 latest.log / crash-report / launcher.log
+            addFileToZip(zos, baseDir, "versions/" + versionId + "/logs/latest.log", "latest.log");
+            addFileToZip(zos, baseDir, "versions/" + versionId + "/logs/launcher.log", "launcher.log");
+            File crashDir = new File(baseDir, "versions/" + versionId + "/crash-reports");
+            if (crashDir.exists()) {
+                File[] reports = crashDir.listFiles((d, n) -> n.endsWith(".txt"));
+                if (reports != null && reports.length > 0) {
+                    Arrays.sort(reports, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                    addFileToZip(zos, baseDir, "versions/" + versionId + "/crash-reports/" + reports[0].getName(), "crash-report.txt");
+                }
+            }
+
+            Alert done = new Alert(Alert.AlertType.INFORMATION);
+            done.setTitle("导出成功");
+            done.setHeaderText("错误报告已导出");
+            done.setContentText("文件已保存到:\n" + file.getAbsolutePath() + "\n\n请将此文件发送给开发者，或提交到 GitHub Issue。");
+            done.showAndWait();
+
+        } catch (Exception ex) {
+            Alert err = new Alert(Alert.AlertType.ERROR);
+            err.setTitle("导出失败");
+            err.setHeaderText("无法导出错误报告");
+            err.setContentText(ex.getMessage());
+            err.showAndWait();
+        }
+    }
+
+    private void addFileToZip(ZipOutputStream zos, String baseDir, String relativePath, String entryName) {
+        File src = new File(baseDir, relativePath);
+        if (!src.exists()) return;
+        try (FileInputStream fis = new FileInputStream(src)) {
+            zos.putNextEntry(new ZipEntry(entryName));
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = fis.read(buf)) != -1) {
+                zos.write(buf, 0, len);
+            }
+            zos.closeEntry();
+        } catch (Exception ignored) {}
+    }
+
+    // ============================================================
+    // 以下为常规功能，不涉及配置保存
     // ============================================================
 
     private void openGameSettings() {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/game_setting.fxml"));
             Parent root = loader.load();
-            
+
             GameSettingController controller = loader.getController();
             controller.initData(selectedVersionId, () -> {
-                // 🚨 游戏设置窗口关闭后，重新读取可能变化的配置，并保存一次
+                // 游戏设置窗口关闭后，重新读取可能变化的配置，并保存一次
                 Map<String, Object> setup = ConfigManager.loadSetup();
                 if (setup.get("memory") != null) {
                     maxMemory = ((Number) setup.get("memory")).intValue();
@@ -289,7 +439,7 @@ public class MainController {
                 forceSaveConfigNow();
                 chooseLabel.setText("状态: 已保存设置");
             });
-            
+
             Stage stage = new Stage();
             stage.setTitle("游戏设置");
             stage.setScene(new Scene(root));
@@ -311,9 +461,9 @@ public class MainController {
             Platform.runLater(() -> {
                 categoryContainer.getChildren().clear();
                 if (versions != null) {
-                    ConfigManager.saveVersions(versions);  // 🚨 注意：这是 version.json，不是 Setup.json
+                    ConfigManager.saveVersions(versions);
                     onlineVersionsCache = versions;
-                    extractLatestVersions(versions); 
+                    extractLatestVersions(versions);
                     buildCategoryUI(versions);
                     chooseLabel.setText("状态: 版本列表已更新");
                 } else {
@@ -363,7 +513,7 @@ public class MainController {
                 alert.setHeaderText("检测到 Minecraft 版本更新");
                 alert.setContentText(msg.toString() + "已为您自动更新列表！");
                 alert.show();
-                buildCategoryUI(newVersions);   // 🚨 只刷新 UI，不触发 Setup.json 保存
+                buildCategoryUI(newVersions);   // 只刷新 UI，不触发 Setup.json 保存
             });
         }
     }
@@ -400,9 +550,9 @@ public class MainController {
     private void buildCategoryUI(JsonArray versions) {
         categoryContainer.getChildren().clear();
 
-        List<JsonObject> releases = new ArrayList<>(), snapshots = new ArrayList<>(), olds = new ArrayList<>(), fools = new ArrayList<>(); 
+        List<JsonObject> releases = new ArrayList<>(), snapshots = new ArrayList<>(), olds = new ArrayList<>(), fools = new ArrayList<>();
         Set<String> FOOL_VERSIONS = Set.of("2.0", "15w14a", "1.rv-pre1", "3d shareware v1.34", "20w14infinite", "22w13oneblockatatime", "23w13a_or_b", "23w13aor_b", "24w14potato", "25w14craftmine", "26w14a");
-        
+
         for (JsonElement element : versions) {
             JsonObject v = element.getAsJsonObject();
             String type = v.get("type").getAsString(), id = v.get("id").getAsString(), lowerId = id.toLowerCase();
@@ -411,16 +561,16 @@ public class MainController {
             else if ("snapshot".equals(type)) snapshots.add(v);
             else if (id.startsWith("a") || id.startsWith("b") || "old_beta".equals(type) || "old_alpha".equals(type)) olds.add(v);
         }
-        
-        VBox latestBox = createCategoryBox("最新版本"); 
+
+        VBox latestBox = createCategoryBox("最新版本");
         VBox latestContent = new VBox(5);
-        
+
         if (!releases.isEmpty()) latestContent.getChildren().add(createVersionItem(releases.get(0), "最新正式版"));
         if (!snapshots.isEmpty()) latestContent.getChildren().add(createVersionItem(snapshots.get(0), "最新预览版"));
-        
-        latestBox.getChildren().add(latestContent); 
+
+        latestBox.getChildren().add(latestContent);
         categoryContainer.getChildren().add(latestBox);
-        
+
         categoryContainer.getChildren().add(createCollapsibleCategory("正式版", releases, false));
         categoryContainer.getChildren().add(createCollapsibleCategory("预览版", snapshots, false));
         categoryContainer.getChildren().add(createCollapsibleCategory("远古版", olds, false));
@@ -428,39 +578,39 @@ public class MainController {
     }
 
     private VBox createCategoryBox(String title) {
-        VBox box = new VBox(10); 
+        VBox box = new VBox(10);
         box.setStyle("-fx-background-color: #3b3b3b; -fx-background-radius: 8; -fx-padding: 15;");
-        Label titleLabel = new Label(title); 
+        Label titleLabel = new Label(title);
         titleLabel.setStyle("-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: bold;");
-        box.getChildren().add(titleLabel); 
+        box.getChildren().add(titleLabel);
         return box;
     }
 
     private VBox createCollapsibleCategory(String title, List<JsonObject> versionList, boolean isExpanded) {
-        VBox box = createCategoryBox(title); 
-        VBox contentBox = new VBox(5); 
-        contentBox.setVisible(isExpanded); 
+        VBox box = createCategoryBox(title);
+        VBox contentBox = new VBox(5);
+        contentBox.setVisible(isExpanded);
         contentBox.setManaged(isExpanded);
-        
+
         for (JsonObject v : versionList) {
             contentBox.getChildren().add(createVersionItem(v, ""));
         }
-        
+
         Label titleLabel = (Label) box.getChildren().get(0);
-        titleLabel.setStyle("-fx-cursor: hand;"); 
-        titleLabel.setOnMouseClicked(e -> { 
-            contentBox.setVisible(!contentBox.isVisible()); 
-            contentBox.setManaged(contentBox.isVisible()); 
+        titleLabel.setStyle("-fx-cursor: hand;");
+        titleLabel.setOnMouseClicked(e -> {
+            contentBox.setVisible(!contentBox.isVisible());
+            contentBox.setManaged(contentBox.isVisible());
         });
-        
-        box.getChildren().add(contentBox); 
+
+        box.getChildren().add(contentBox);
         return box;
     }
 
     private Button createVersionItem(JsonObject v, String tag) {
         String id = v.get("id").getAsString(), type = v.get("type").getAsString(), displayName = id + (tag.isEmpty() ? " (" + type + ")" : " - " + tag);
-        Button btn = new Button(displayName); 
-        btn.setMaxWidth(Double.MAX_VALUE); 
+        Button btn = new Button(displayName);
+        btn.setMaxWidth(Double.MAX_VALUE);
         btn.setAlignment(Pos.CENTER_LEFT);
         btn.setStyle("-fx-background-color: transparent; -fx-text-fill: #dddddd; -fx-font-size: 14px; -fx-cursor: hand;");
         btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: #444444; -fx-text-fill: white; -fx-font-size: 14px;"));
@@ -475,13 +625,13 @@ public class MainController {
             Parent root = loader.load();
             DownloadPlayerController controller = loader.getController();
             controller.setVersion(versionId);
-            Stage stage = new Stage(); 
-            stage.setTitle("下载游戏 - " + versionId); 
-            stage.setScene(new Scene(root)); 
-            stage.initModality(Modality.APPLICATION_MODAL); 
+            Stage stage = new Stage();
+            stage.setTitle("下载游戏 - " + versionId);
+            stage.setScene(new Scene(root));
+            stage.initModality(Modality.APPLICATION_MODAL);
             stage.show();
-        } catch (IOException ex) { 
-            ex.printStackTrace(); 
+        } catch (IOException ex) {
+            ex.printStackTrace();
         }
     }
 
@@ -494,29 +644,29 @@ public class MainController {
                 selectedVersionId = selectedVersion.getId();
                 if (chooseLabel != null) chooseLabel.setText("状态: 已选择本地版本 " + selectedVersionId);
                 if (lblSelectedVersion != null) lblSelectedVersion.setText(selectedVersionId);
-                // 🚨 版本选择变化也立即保存
+                // 版本选择变化也立即保存
                 forceSaveConfigNow();
             });
-            Stage stage = new Stage(); 
-            stage.setTitle("版本管理器"); 
-            stage.setScene(new Scene(root)); 
-            stage.initModality(Modality.APPLICATION_MODAL); 
+            Stage stage = new Stage();
+            stage.setTitle("版本管理器");
+            stage.setScene(new Scene(root));
+            stage.initModality(Modality.APPLICATION_MODAL);
             stage.show();
-        } catch (IOException ex) { 
-            ex.printStackTrace(); 
+        } catch (IOException ex) {
+            ex.printStackTrace();
         }
     }
 
     @FXML
-    public void selectVersion() { 
-        openVersionManager(); 
+    public void selectVersion() {
+        openVersionManager();
     }
 
-    public String getNameFieldValue() { 
-        return name != null ? name.getText() : "Steve"; 
+    public String getNameFieldValue() {
+        return name != null ? name.getText() : "Steve";
     }
 
-    public String getSelectedVersion() { 
-        return selectedVersionId; 
+    public String getSelectedVersion() {
+        return selectedVersionId;
     }
 }
