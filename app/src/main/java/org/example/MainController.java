@@ -11,6 +11,8 @@ import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -71,7 +73,6 @@ public class MainController {
     private int maxMemory = 4096;
     private boolean globalIsolateVersion = true;
 
-    // 定时器：定期检查版本列表更新
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r);
         t.setDaemon(true);
@@ -79,7 +80,6 @@ public class MainController {
         return t;
     });
 
-    // 独立保存定时器：用于防抖合并配置保存
     private final ScheduledExecutorService saveScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r);
         t.setDaemon(true);
@@ -89,178 +89,267 @@ public class MainController {
     private ScheduledFuture<?> pendingSaveTask = null;
 
     // ============================================================
-    // 🚨 初始化
+    // 🚨 初始化（分段 try-catch，保证任何一步出错都不会导致整个界面失效）
     // ============================================================
     @FXML
     public void initialize() {
-        ConfigManager.init();
+        System.out.println("[Init] MainController.initialize() 开始");
+        System.out.println("[Init] chkGlobalIsolation " + (chkGlobalIsolation != null ? "已注入" : "= null !!!"));
 
-        Map<String, Object> setup = ConfigManager.loadSetup();
-
-        // ---------- 读取初始配置 ----------
-        if (setup.get("playerId") != null && name != null) {
-            name.setText((String) setup.get("playerId"));
+        try {
+            ConfigManager.init();
+        } catch (Exception e) {
+            System.err.println("[Init] ConfigManager.init() 失败: " + e.getMessage());
         }
 
-        if (setup.get("memory") != null) {
-            maxMemory = ((Number) setup.get("memory")).intValue();
+        Map<String, Object> setup;
+        try {
+            setup = ConfigManager.loadSetup();
+        } catch (Exception e) {
+            System.err.println("[Init] loadSetup() 失败: " + e.getMessage());
+            setup = new java.util.HashMap<>();
         }
 
-        if (setup.get("isolateVersion") != null) {
-            globalIsolateVersion = (Boolean) setup.get("isolateVersion");
-        } else {
-            ConfigManager.updateSingleConfig("isolateVersion", true);
+        // ---------- 读取 playerId ----------
+        try {
+            if (setup.get("playerId") != null && name != null) {
+                name.setText((String) setup.get("playerId"));
+            }
+        } catch (Exception e) {
+            System.err.println("[Init] 读取 playerId 失败: " + e.getMessage());
+        }
+
+        // ---------- 读取 memory ----------
+        try {
+            if (setup.get("memory") != null) {
+                maxMemory = ((Number) setup.get("memory")).intValue();
+            }
+        } catch (Exception e) {
+            System.err.println("[Init] 读取 memory 失败: " + e.getMessage());
+        }
+
+        // ---------- 🚨 读取 isolateVersion（带 lookup 兜底） ----------
+        try {
+            Object rawIsolation = setup.get("isolateVersion");
+            System.out.println("[BOOT] Setup.json 中 isolateVersion = " + rawIsolation
+                    + " (类型: " + (rawIsolation == null ? "null" : rawIsolation.getClass().getName()) + ")");
+
+            if (rawIsolation != null) {
+                globalIsolateVersion = parseBoolean(rawIsolation, true);
+            } else {
+                ConfigManager.updateSingleConfig("isolateVersion", true);
+                globalIsolateVersion = true;
+            }
+            final boolean initialValue = globalIsolateVersion;
+            System.out.println("[BOOT] 解析为 globalIsolateVersion = " + initialValue);
+
+            if (chkGlobalIsolation != null) {
+                chkGlobalIsolation.setSelected(initialValue);
+                chkGlobalIsolation.selectedProperty().addListener((obs, oldVal, newVal) -> {
+                    globalIsolateVersion = newVal;
+                    scheduleConfigSave();
+                    chooseLabel.setText("状态: 版本隔离已" + (newVal ? "开启" : "关闭"));
+                });
+                System.out.println("[BOOT] ✅ 立即同步成功，chkGlobalIsolation.isSelected() = " + chkGlobalIsolation.isSelected());
+            } else {
+                System.err.println("[BOOT] ❌ @FXML 注入失败，chkGlobalIsolation = null，将用 Scene.lookup 兜底");
+            }
+
+            // 兜底：等 FX 线程下一帧，用 lookup 再强制同步一次
+            Platform.runLater(() -> {
+                CheckBox cb = chkGlobalIsolation;
+                if (cb == null && categoryContainer != null && categoryContainer.getScene() != null) {
+                    javafx.scene.Node node = categoryContainer.getScene().lookup("#chkGlobalIsolation");
+                    if (node instanceof CheckBox) {
+                        cb = (CheckBox) node;
+                        chkGlobalIsolation = cb;
+                        System.out.println("[BOOT] ✅ 通过 Scene.lookup 找到 chkGlobalIsolation");
+                    }
+                }
+                if (cb != null) {
+                    cb.setSelected(initialValue);
+                    if (cb.getProperties().get("himi_listener_registered") == null) {
+                        cb.selectedProperty().addListener((obs, oldVal, newVal) -> {
+                            globalIsolateVersion = newVal;
+                            scheduleConfigSave();
+                            chooseLabel.setText("状态: 版本隔离已" + (newVal ? "开启" : "关闭"));
+                        });
+                        cb.getProperties().put("himi_listener_registered", true);
+                    }
+                    System.out.println("[BOOT] ✅ 兜底同步完成，chkGlobalIsolation.isSelected() = " + cb.isSelected()
+                            + "，config = " + initialValue);
+                } else {
+                    System.err.println("[BOOT] ❌❌❌ 无论如何都找不到 chkGlobalIsolation！");
+                }
+            });
+
+        } catch (Exception e) {
+            System.err.println("[BOOT] 初始化版本隔离失败: " + e.getMessage());
+            e.printStackTrace();
             globalIsolateVersion = true;
         }
 
-        if (setup.get("selectedVersion") != null) {
-            selectedVersionId = (String) setup.get("selectedVersion");
-            if (chooseLabel != null) {
-                chooseLabel.setText("状态: 已加载本地版本 " + selectedVersionId);
+        // ---------- 读取 selectedVersion ----------
+        try {
+            if (setup.get("selectedVersion") != null) {
+                selectedVersionId = (String) setup.get("selectedVersion");
+                if (chooseLabel != null) {
+                    chooseLabel.setText("状态: 已加载本地版本 " + selectedVersionId);
+                }
+                if (lblSelectedVersion != null) {
+                    lblSelectedVersion.setText(selectedVersionId);
+                }
+            } else {
+                if (chooseLabel != null) {
+                    chooseLabel.setText("状态: 准备就绪");
+                }
             }
-            if (lblSelectedVersion != null) {
-                lblSelectedVersion.setText(selectedVersionId);
-            }
-        } else {
-            if (chooseLabel != null) {
-                chooseLabel.setText("状态: 准备就绪");
-            }
+        } catch (Exception e) {
+            System.err.println("[Init] 读取 selectedVersion 失败: " + e.getMessage());
         }
 
-        localVersions = VersionScanner.scan(ConfigManager.DEFAULT_MC_DIR);
+        // ---------- 扫描本地版本 ----------
+        try {
+            localVersions = VersionScanner.scan(ConfigManager.DEFAULT_MC_DIR);
+        } catch (Exception e) {
+            System.err.println("[Init] 扫描本地版本失败: " + e.getMessage());
+            localVersions = new ArrayList<>();
+        }
 
-        // ---------- 🚨 注册所有"配置变化点"的自动保存监听器 ----------
-
-        // 1. 玩家名称实时监听（防抖后自动保存）
+        // ---------- 注册玩家名称监听 ----------
         if (name != null) {
-            name.textProperty().addListener((obs, oldVal, newVal) -> {
-                scheduleConfigSave();
-            });
+            name.textProperty().addListener((obs, oldVal, newVal) -> scheduleConfigSave());
             name.setOnAction(e -> {
                 forceSaveConfigNow();
                 chooseLabel.setText("状态: 玩家名称已保存");
             });
             name.focusedProperty().addListener((obs, oldVal, newVal) -> {
-                if (!newVal) {
+                if (!newVal) forceSaveConfigNow();
+            });
+        }
+
+        // ---------- 绑定按钮 ----------
+        try {
+            if (ace != null) {
+                ace.setOnAction(event -> {
+                    chooseLabel.setText("状态: 原版游戏");
+                    loadOnlineVersions();
+                });
+            }
+        } catch (Exception e) {
+            System.err.println("[Init] 绑定 ace 失败: " + e.getMessage());
+        }
+
+        try {
+            if (reloadVersionsBtn != null) {
+                SVGPath refreshIcon = new SVGPath();
+                refreshIcon.setContent("M512.0 838.3c-80.2 0-153.4-29.3-210.2-77.4l75.5-75.5c11.5-11.5 25.8-22.0 25.8-37.0a27.2 27.2 0 0 0-27.1-27.1H104.0c-27.1 0-27.1 23.9-27.1 27.1v271.9a27.1 27.1 0 0 0 27.1 27.1c15.0 0 27.8-16.6 42.5-31.2l77.9-77.9c76.6 67.7 177.1 108.9 287.4 108.9 221.7 0 404.5-166.0 431.2-380.6h-109.8c-25.9 154.2-159.7 271.9-321.3 271.9zM919.9 76.6c-15.0 0-27.8 16.6-42.5 31.3L799.5 185.8c-76.5-67.7-177.1-108.9-287.4-108.9-221.8 0-404.5 166.1-431.3 380.6H190.6c25.9-154.2 159.7-271.9 321.4-271.9 80.2 0 153.4 29.3 210.1 77.4l-75.5 75.5c-11.6 11.5-25.8 22.0-25.8 37.1a27.2 27.2 0 0 0 27.1 27.1h271.9c27.1 0 27.1-23.9 27.1-27.1V103.8a27.1 27.1 0 0 0-27.1-27.1z");
+                refreshIcon.setFill(Color.WHITE);
+                refreshIcon.setScaleX(0.018);
+                refreshIcon.setScaleY(0.018);
+                StackPane iconWrapper = new StackPane(refreshIcon);
+                iconWrapper.setPrefSize(30, 30);
+                reloadVersionsBtn.setGraphic(iconWrapper);
+                reloadVersionsBtn.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
+                reloadVersionsBtn.setOnAction(e -> {
+                    chooseLabel.setText("状态: 正在重新加载版本列表...");
+                    localVersions = VersionScanner.scan(ConfigManager.DEFAULT_MC_DIR);
+                    loadOnlineVersions();
+                });
+            }
+        } catch (Exception e) {
+            System.err.println("[Init] 初始化重新加载按钮失败: " + e.getMessage());
+        }
+
+        try {
+            if (Setting != null) {
+                Setting.setOnAction(e -> openGameSettings());
+            }
+        } catch (Exception e) {
+            System.err.println("[Init] 绑定设置按钮失败: " + e.getMessage());
+        }
+
+        try {
+            if (start_game != null) {
+                start_game.setOnAction(e -> {
+                    String playerId = name.getText();
                     forceSaveConfigNow();
-                }
-            });
-        }
 
-        // 2. 版本隔离复选框监听
-        if (chkGlobalIsolation != null) {
-            chkGlobalIsolation.setSelected(globalIsolateVersion);
-            chkGlobalIsolation.selectedProperty().addListener((obs, oldVal, newVal) -> {
-                globalIsolateVersion = newVal;
-                scheduleConfigSave();
-                chooseLabel.setText("状态: 版本隔离已" + (newVal ? "开启" : "关闭"));
-            });
-        }
-
-        // ---------- 按钮绑定 ----------
-
-        if (ace != null) {
-            ace.setOnAction(event -> {
-                chooseLabel.setText("状态: 原版游戏");
-                loadOnlineVersions();
-            });
-        }
-
-        // 初始化重新加载按钮：应用 PCL 同款 SVG 图标及事件
-        if (reloadVersionsBtn != null) {
-            SVGPath refreshIcon = new SVGPath();
-            refreshIcon.setContent("M512.0 838.3c-80.2 0-153.4-29.3-210.2-77.4l75.5-75.5c11.5-11.5 25.8-22.0 25.8-37.0a27.2 27.2 0 0 0-27.1-27.1H104.0c-27.1 0-27.1 23.9-27.1 27.1v271.9a27.1 27.1 0 0 0 27.1 27.1c15.0 0 27.8-16.6 42.5-31.2l77.9-77.9c76.6 67.7 177.1 108.9 287.4 108.9 221.7 0 404.5-166.0 431.2-380.6h-109.8c-25.9 154.2-159.7 271.9-321.3 271.9zM919.9 76.6c-15.0 0-27.8 16.6-42.5 31.3L799.5 185.8c-76.5-67.7-177.1-108.9-287.4-108.9-221.8 0-404.5 166.1-431.3 380.6H190.6c25.9-154.2 159.7-271.9 321.4-271.9 80.2 0 153.4 29.3 210.1 77.4l-75.5 75.5c-11.6 11.5-25.8 22.0-25.8 37.1a27.2 27.2 0 0 0 27.1 27.1h271.9c27.1 0 27.1-23.9 27.1-27.1V103.8a27.1 27.1 0 0 0-27.1-27.1z");
-            refreshIcon.setFill(Color.WHITE);
-            refreshIcon.setScaleX(0.018);
-            refreshIcon.setScaleY(0.018);
-
-            StackPane iconWrapper = new StackPane(refreshIcon);
-            iconWrapper.setPrefSize(30, 30);
-            reloadVersionsBtn.setGraphic(iconWrapper);
-            reloadVersionsBtn.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
-
-            reloadVersionsBtn.setOnAction(e -> {
-                chooseLabel.setText("状态: 正在重新加载版本列表...");
-                localVersions = VersionScanner.scan(ConfigManager.DEFAULT_MC_DIR);
-                loadOnlineVersions();
-            });
-        }
-
-        if (Setting != null) {
-            Setting.setOnAction(e -> openGameSettings());
-        }
-
-        if (start_game != null) {
-            start_game.setOnAction(e -> {
-                String playerId = name.getText();
-
-                // 启动前强制保存一次，作为兜底
-                forceSaveConfigNow();
-
-                if (selectedVersionId == null || selectedVersionId.equals("未选择")) {
-                    Alert alert = new Alert(Alert.AlertType.WARNING, "请先选择一个游戏版本！");
-                    alert.show();
-                    return;
-                }
-
-                chooseLabel.setText("状态: 正在启动游戏，请稍后...");
-                start_game.setDisable(true);
-
-                new Thread(() -> {
-                    try {
-                        GameLauncher.launch(selectedVersionId, playerId, ConfigManager.DEFAULT_MC_DIR, maxMemory, globalIsolateVersion);
-                        Platform.runLater(() -> {
-                            chooseLabel.setText("状态: 游戏已启动！");
-                            start_game.setDisable(false);
-                        });
-                    } catch (GameLaunchException gle) {
-                        // 🚨 崩溃分析结果弹窗
-                        Platform.runLater(() -> {
-                            showCrashReportDialog(gle);
-                            chooseLabel.setText("状态: 游戏崩溃（分析已展示）");
-                            start_game.setDisable(false);
-                        });
-                    } catch (Exception ex) {
-                        ex.printStackTrace();
-                        Platform.runLater(() -> {
-                            // 🚨 详细报错弹窗
-                            Alert alert = new Alert(Alert.AlertType.ERROR);
-                            alert.setTitle("启动失败");
-                            alert.setHeaderText("无法启动游戏: " + ex.getMessage());
-
-                            StringWriter sw = new StringWriter();
-                            PrintWriter pw = new PrintWriter(sw);
-                            ex.printStackTrace(pw);
-                            TextArea textArea = new TextArea(sw.toString());
-                            textArea.setEditable(false);
-                            textArea.setWrapText(true);
-
-                            alert.getDialogPane().setExpandableContent(new ScrollPane(textArea));
-                            alert.show();
-
-                            chooseLabel.setText("状态: 启动失败");
-                            start_game.setDisable(false);
-                        });
+                    if (selectedVersionId == null || selectedVersionId.equals("未选择")) {
+                        new Alert(Alert.AlertType.WARNING, "请先选择一个游戏版本！").show();
+                        return;
                     }
-                }).start();
-            });
+
+                    chooseLabel.setText("状态: 正在启动游戏，请稍后...");
+                    start_game.setDisable(true);
+
+                    new Thread(() -> {
+                        try {
+                            GameLauncher.launch(selectedVersionId, playerId, ConfigManager.DEFAULT_MC_DIR, maxMemory, globalIsolateVersion);
+                            Platform.runLater(() -> {
+                                chooseLabel.setText("状态: 游戏已启动！");
+                                start_game.setDisable(false);
+                            });
+                        } catch (GameLaunchException gle) {
+                            Platform.runLater(() -> {
+                                showCrashReportDialog(gle);
+                                chooseLabel.setText("状态: 游戏崩溃（分析已展示）");
+                                start_game.setDisable(false);
+                            });
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                            Platform.runLater(() -> {
+                                Alert alert = new Alert(Alert.AlertType.ERROR);
+                                alert.setTitle("启动失败");
+                                alert.setHeaderText("无法启动游戏: " + ex.getMessage());
+                                StringWriter sw = new StringWriter();
+                                PrintWriter pw = new PrintWriter(sw);
+                                ex.printStackTrace(pw);
+                                TextArea textArea = new TextArea(sw.toString());
+                                textArea.setEditable(false);
+                                textArea.setWrapText(true);
+                                alert.getDialogPane().setExpandableContent(new ScrollPane(textArea));
+                                alert.show();
+                                chooseLabel.setText("状态: 启动失败");
+                                start_game.setDisable(false);
+                            });
+                        }
+                    }).start();
+                });
+            }
+        } catch (Exception e) {
+            System.err.println("[Init] 绑定启动按钮失败: " + e.getMessage());
         }
 
-        // ---------- 🚨 首次加载在线版本（不触发保存） ----------
-        loadOnlineVersions();
+        try {
+            loadOnlineVersions();
+        } catch (Exception e) {
+            System.err.println("[Init] 首次加载在线版本失败: " + e.getMessage());
+        }
 
-        // 每 30 分钟检查更新（不触发保存）
         scheduler.scheduleAtFixedRate(this::checkForUpdates, 1, 30, TimeUnit.MINUTES);
+        System.out.println("[Init] MainController.initialize() 完成");
+    }
+
+    /**
+     * 健壮地把配置文件里的值转为 boolean。
+     */
+    private static boolean parseBoolean(Object raw, boolean defaultValue) {
+        if (raw == null) return defaultValue;
+        if (raw instanceof Boolean) return (Boolean) raw;
+        if (raw instanceof String) {
+            String s = ((String) raw).trim().toLowerCase();
+            if (s.equals("true") || s.equals("1") || s.equals("yes")) return true;
+            if (s.equals("false") || s.equals("0") || s.equals("no")) return false;
+        }
+        if (raw instanceof Number) return ((Number) raw).intValue() != 0;
+        return defaultValue;
     }
 
     // ============================================================
-    // 🚨 核心：配置自动保存机制（防抖合并写入）
+    // 配置自动保存（防抖合并写入）
     // ============================================================
 
-    /**
-     * 触发配置保存（防抖：500ms 内的多次触发会合并成一次写入）
-     * 避免用户每敲一个字符就写一次硬盘
-     */
     private synchronized void scheduleConfigSave() {
         if (pendingSaveTask != null && !pendingSaveTask.isDone()) {
             pendingSaveTask.cancel(false);
@@ -268,9 +357,6 @@ public class MainController {
         pendingSaveTask = saveScheduler.schedule(this::doSaveConfig, 500, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * 立即强制保存配置（不走防抖），用于回车、失焦、启动前等重要时机
-     */
     private synchronized void forceSaveConfigNow() {
         if (pendingSaveTask != null && !pendingSaveTask.isDone()) {
             pendingSaveTask.cancel(false);
@@ -279,9 +365,6 @@ public class MainController {
         doSaveConfig();
     }
 
-    /**
-     * 实际执行保存：读取完整配置，只更新 UI 相关的字段，然后整体写回
-     */
     private void doSaveConfig() {
         try {
             Map<String, Object> setup = ConfigManager.loadSetup();
@@ -309,7 +392,7 @@ public class MainController {
     }
 
     // ============================================================
-    // 🚨 崩溃报告弹窗 + 导出错误报告
+    // 崩溃报告弹窗 + 导出错误报告
     // ============================================================
     private void showCrashReportDialog(GameLaunchException gle) {
         CrashAnalyzer.CrashReport report = gle.getReport();
@@ -325,7 +408,6 @@ public class MainController {
         }
         alert.setContentText(content.toString().trim());
 
-        // 详细日志（可展开）
         TextArea textArea = new TextArea(report.detailLog.isEmpty() ? "（未捕获到详细日志）" : report.detailLog);
         textArea.setEditable(false);
         textArea.setWrapText(true);
@@ -333,7 +415,6 @@ public class MainController {
         textArea.setPrefColumnCount(100);
         alert.getDialogPane().setExpandableContent(new ScrollPane(textArea));
 
-        // 自定义按钮：导出错误报告
         ButtonType btnExport = new ButtonType("导出错误报告", ButtonBar.ButtonData.LEFT);
         alert.getButtonTypes().add(0, btnExport);
 
@@ -356,12 +437,10 @@ public class MainController {
         String versionId = gle.getVersionId();
 
         try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(file))) {
-            // 1. 分析结果
             zos.putNextEntry(new ZipEntry("HiMi-分析结果.txt"));
             zos.write(String.join("\n\n", report.reasons).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             zos.closeEntry();
 
-            // 2. 系统信息
             zos.putNextEntry(new ZipEntry("系统信息.txt"));
             String sysInfo = "系统: " + System.getProperty("os.name") + " " + System.getProperty("os.version") + "\n"
                     + "架构: " + System.getProperty("os.arch") + "\n"
@@ -374,12 +453,10 @@ public class MainController {
             zos.write(sysInfo.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             zos.closeEntry();
 
-            // 3. 详细日志
             zos.putNextEntry(new ZipEntry("完整日志.txt"));
             zos.write(report.detailLog.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             zos.closeEntry();
 
-            // 4. 附带 latest.log / crash-report / launcher.log
             addFileToZip(zos, baseDir, "versions/" + versionId + "/logs/latest.log", "latest.log");
             addFileToZip(zos, baseDir, "versions/" + versionId + "/logs/launcher.log", "launcher.log");
             File crashDir = new File(baseDir, "versions/" + versionId + "/crash-reports");
@@ -394,7 +471,7 @@ public class MainController {
             Alert done = new Alert(Alert.AlertType.INFORMATION);
             done.setTitle("导出成功");
             done.setHeaderText("错误报告已导出");
-            done.setContentText("文件已保存到:\n" + file.getAbsolutePath() + "\n\n请将此文件发送给开发者，或提交到 GitHub Issue。");
+            done.setContentText("文件已保存到:\n" + file.getAbsolutePath());
             done.showAndWait();
 
         } catch (Exception ex) {
@@ -421,9 +498,8 @@ public class MainController {
     }
 
     // ============================================================
-    // 以下为常规功能，不涉及配置保存
+    // 以下为常规功能
     // ============================================================
-
     private void openGameSettings() {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/game_setting.fxml"));
@@ -431,7 +507,6 @@ public class MainController {
 
             GameSettingController controller = loader.getController();
             controller.initData(selectedVersionId, () -> {
-                // 游戏设置窗口关闭后，重新读取可能变化的配置，并保存一次
                 Map<String, Object> setup = ConfigManager.loadSetup();
                 if (setup.get("memory") != null) {
                     maxMemory = ((Number) setup.get("memory")).intValue();
@@ -513,7 +588,7 @@ public class MainController {
                 alert.setHeaderText("检测到 Minecraft 版本更新");
                 alert.setContentText(msg.toString() + "已为您自动更新列表！");
                 alert.show();
-                buildCategoryUI(newVersions);   // 只刷新 UI，不触发 Setup.json 保存
+                buildCategoryUI(newVersions);
             });
         }
     }
@@ -586,8 +661,24 @@ public class MainController {
         return box;
     }
 
+    // 🚨 修复：HBox 包裹标题 + 撑满宽度 + 三角箭头
     private VBox createCollapsibleCategory(String title, List<JsonObject> versionList, boolean isExpanded) {
-        VBox box = createCategoryBox(title);
+        VBox box = new VBox(10);
+        box.setStyle("-fx-background-color: #3b3b3b; -fx-background-radius: 8; -fx-padding: 15;");
+
+        Label arrow = new Label(isExpanded ? "▼" : "▶");
+        arrow.setStyle("-fx-text-fill: #aaaaaa; -fx-font-size: 12px; -fx-font-family: monospace;");
+
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle("-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: bold;");
+
+        HBox header = new HBox(8, arrow, titleLabel);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setMaxWidth(Double.MAX_VALUE);
+        header.setPickOnBounds(true);
+        header.setStyle("-fx-cursor: hand; -fx-padding: 3 0 3 0;");
+        HBox.setHgrow(header, Priority.ALWAYS);
+
         VBox contentBox = new VBox(5);
         contentBox.setVisible(isExpanded);
         contentBox.setManaged(isExpanded);
@@ -596,14 +687,14 @@ public class MainController {
             contentBox.getChildren().add(createVersionItem(v, ""));
         }
 
-        Label titleLabel = (Label) box.getChildren().get(0);
-        titleLabel.setStyle("-fx-cursor: hand;");
-        titleLabel.setOnMouseClicked(e -> {
-            contentBox.setVisible(!contentBox.isVisible());
-            contentBox.setManaged(contentBox.isVisible());
+        header.setOnMouseClicked(e -> {
+            boolean newVisible = !contentBox.isVisible();
+            contentBox.setVisible(newVisible);
+            contentBox.setManaged(newVisible);
+            arrow.setText(newVisible ? "▼" : "▶");
         });
 
-        box.getChildren().add(contentBox);
+        box.getChildren().addAll(header, contentBox);
         return box;
     }
 
@@ -644,7 +735,6 @@ public class MainController {
                 selectedVersionId = selectedVersion.getId();
                 if (chooseLabel != null) chooseLabel.setText("状态: 已选择本地版本 " + selectedVersionId);
                 if (lblSelectedVersion != null) lblSelectedVersion.setText(selectedVersionId);
-                // 版本选择变化也立即保存
                 forceSaveConfigNow();
             });
             Stage stage = new Stage();
