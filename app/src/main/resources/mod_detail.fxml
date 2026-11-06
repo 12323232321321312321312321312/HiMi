@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="org.example.mod.ModDetailController"
+      prefHeight="650" prefWidth="900" style="-fx-background-color: #1e1e1e;">
+
+    <HBox spacing="16" style="-fx-padding: 16; -fx-background-color: #2b2b2b;">
+        <ImageView fx:id="iconView" fitWidth="80" fitHeight="80" preserveRatio="true"/>
+        <VBox spacing="4" HBox.hgrow="ALWAYS">
+            <Label fx:id="titleLabel" textFill="white" style="-fx-font-size: 22px; -fx-font-weight: bold;"/>
+            <Label fx:id="authorLabel" textFill="#aaaaaa" style="-fx-font-size: 13px;"/>
+            <Label fx:id="descLabel" textFill="#cccccc" style="-fx-font-size: 13px;" wrapText="true"/>
+            <Label fx:id="metaLabel" textFill="#888888" style="-fx-font-size: 11px;"/>
+        </VBox>
+    </HBox>
+
+    <HBox spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 8 16; -fx-background-color: #222;">
+        <Label text="筛选：" textFill="white"/>
+        <Label text="游戏版本:" textFill="white"/>
+        <!-- 🚨 新增 editable="true" -->
+        <ComboBox fx:id="gvFilter" prefWidth="110" editable="true"/>
+        
+        <Label text="加载器:" textFill="white"/>
+        <!-- 🚨 新增 editable="true" -->
+        <ComboBox fx:id="loaderFilter" prefWidth="110" editable="true"/>
+        
+        <Button fx:id="applyFilterBtn" text="应用"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="statusLabel" text="" textFill="#aaaaaa"/>
+    </HBox>
+
+    <ListView fx:id="versionListView" VBox.vgrow="ALWAYS" style="-fx-background-color: #1e1e1e; -fx-control-inner-background: #1e1e1e;"/>
+
+    <HBox spacing="12" alignment="CENTER_RIGHT" style="-fx-padding: 12; -fx-background-color: #2b2b2b;">
+        <Button fx:id="downloadBtn" text="下载选中版本" style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 8 20;"/>
+        <Button fx:id="closeBtn" text="关闭"/>
+    </HBox>
+</VBox>

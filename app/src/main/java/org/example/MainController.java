@@ -59,6 +59,7 @@ public class MainController {
     @FXML private Label lblSelectedVersion;
     @FXML private Button choose;
     @FXML private CheckBox chkGlobalIsolation;
+    @FXML private Button mod;
 
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -100,6 +101,10 @@ public class MainController {
             ConfigManager.init();
         } catch (Exception e) {
             System.err.println("[Init] ConfigManager.init() 失败: " + e.getMessage());
+        }
+
+        if (mod != null) {
+            mod.setOnAction(e -> openModDownloadWindow());
         }
 
         Map<String, Object> setup;
@@ -758,5 +763,19 @@ public class MainController {
 
     public String getSelectedVersion() {
         return selectedVersionId;
+    }
+
+    private void openModDownloadWindow() {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/mod_download.fxml"));
+            Parent root = loader.load();
+            Stage stage = new Stage();
+            stage.setTitle("HiMi - 模组下载");
+            stage.setScene(new Scene(root));
+            stage.initModality(Modality.WINDOW_MODAL);
+            stage.show();
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
     }
 }

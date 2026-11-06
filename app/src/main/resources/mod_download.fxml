@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="org.example.mod.ModDownloadController"
+      prefHeight="700" prefWidth="1000" style="-fx-background-color: #1e1e1e;">
+
+    <HBox spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 12; -fx-background-color: #2b2b2b;">
+        <Label text="平台:" textFill="white"/>
+        <ComboBox fx:id="platformFilter" prefWidth="110"/>
+        
+        <Label text="搜索:" textFill="white"/>
+        <TextField fx:id="searchField" prefWidth="240" promptText="输入模组名称/关键词"/>
+        
+        <Label text="游戏版本:" textFill="white"/>
+        <!-- 🚨 新增 editable="true" -->
+        <ComboBox fx:id="gameVersionFilter" prefWidth="110" editable="true"/>
+        
+        <Label text="加载器:" textFill="white"/>
+        <!-- 🚨 新增 editable="true" -->
+        <ComboBox fx:id="loaderFilter" prefWidth="110" editable="true"/>
+        
+        <Button fx:id="searchBtn" text="搜索" style="-fx-background-color: #4CAF50; -fx-text-fill: white;"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="statusLabel" text="就绪" textFill="#aaaaaa"/>
+    </HBox>
+
+    <ListView fx:id="modListView" VBox.vgrow="ALWAYS" style="-fx-background-color: #1e1e1e; -fx-control-inner-background: #1e1e1e;"/>
+</VBox>
