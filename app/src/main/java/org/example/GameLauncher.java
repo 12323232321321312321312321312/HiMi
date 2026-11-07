@@ -71,7 +71,6 @@ public class GameLauncher {
 
         List<String> classpathList = new ArrayList<>();
 
-        // 标准 <version>-natives 文件夹
         File nativesDir = new File(versionDir, versionId + "-natives");
         nativesDir.mkdirs();
 
@@ -117,41 +116,71 @@ public class GameLauncher {
         String classpath = String.join(";", classpathList);
         String nativesDirPath = nativesDir.getAbsolutePath();
 
+        String gameDirPath = isolateVersion ? versionDir.getAbsolutePath() : baseDir;
+        if (isolateVersion) {
+            LogManager.logLauncher("📂 启用了版本隔离，游戏目录: " + gameDirPath);
+        }
+
         List<String> jvmArgs = new ArrayList<>();
         jvmArgs.add(javaPath);
         jvmArgs.add("-Xmx" + Math.max(1024, maxMemoryMB) + "M");
-        jvmArgs.add("-Djava.library.path=" + nativesDirPath);
+        // 🚨 不在开头强制添加 -Djava.library.path，我们在后面统一清洗
 
         if (parentJson != null && parentJson.has("arguments")) {
-            addArguments(jvmArgs, parentJson.getAsJsonObject("arguments").getAsJsonArray("jvm"), nativesDirPath, baseDir, versionId, playerName, classpath, assetsIndex, offlineUUID, osName);
+            addArguments(jvmArgs, parentJson.getAsJsonObject("arguments").getAsJsonArray("jvm"), nativesDirPath, baseDir, gameDirPath, versionId, playerName, classpath, assetsIndex, offlineUUID, osName);
         }
         if (versionJson.has("arguments")) {
-            addArguments(jvmArgs, versionJson.getAsJsonObject("arguments").getAsJsonArray("jvm"), nativesDirPath, baseDir, versionId, playerName, classpath, assetsIndex, offlineUUID, osName);
+            addArguments(jvmArgs, versionJson.getAsJsonObject("arguments").getAsJsonArray("jvm"), nativesDirPath, baseDir, gameDirPath, versionId, playerName, classpath, assetsIndex, offlineUUID, osName);
         }
 
         jvmArgs.add(mainClass);
 
         List<String> gameArgs = new ArrayList<>();
         if (parentJson != null && parentJson.has("arguments")) {
-            addArguments(gameArgs, parentJson.getAsJsonObject("arguments").getAsJsonArray("game"), nativesDirPath, baseDir, versionId, playerName, classpath, assetsIndex, offlineUUID, osName);
+            addArguments(gameArgs, parentJson.getAsJsonObject("arguments").getAsJsonArray("game"), nativesDirPath, baseDir, gameDirPath, versionId, playerName, classpath, assetsIndex, offlineUUID, osName);
         }
         if (versionJson.has("arguments")) {
-            addArguments(gameArgs, versionJson.getAsJsonObject("arguments").getAsJsonArray("game"), nativesDirPath, baseDir, versionId, playerName, classpath, assetsIndex, offlineUUID, osName);
+            addArguments(gameArgs, versionJson.getAsJsonObject("arguments").getAsJsonArray("game"), nativesDirPath, baseDir, gameDirPath, versionId, playerName, classpath, assetsIndex, offlineUUID, osName);
         }
 
         jvmArgs.addAll(gameArgs);
 
-        String gameDirPath = isolateVersion ? versionDir.getAbsolutePath() : baseDir;
-        if (isolateVersion) {
-            LogManager.logLauncher("📂 启用了版本隔离，游戏目录: " + gameDirPath);
+        // 🚨 核心修复：清洗并去重参数
+        List<String> finalArgs = new ArrayList<>();
+        boolean hasLibPath = false;
+
+        for (String arg : jvmArgs) {
+            if (arg.startsWith("-Djava.library.path=")) {
+                // 如果发现旧的 java.library.path 参数，直接忽略，我们等下统一注入正确的
+                continue;
+            }
+            finalArgs.add(arg);
         }
 
-        List<String> finalArgs = new ArrayList<>();
-        for (String arg : jvmArgs) {
+        // 找到主类所在的位置（即第一个不是以 - 开头的参数），把正确的 -Djava.library.path 插在它前面
+        int mainClassIndex = -1;
+        for (int i = 0; i < finalArgs.size(); i++) {
+            String arg = finalArgs.get(i);
+            if (!arg.startsWith("-") && i > 0 && !arg.equals(javaPath)) {
+                mainClassIndex = i;
+                break;
+            }
+        }
+
+        if (mainClassIndex != -1) {
+            finalArgs.add(mainClassIndex, "-Djava.library.path=" + nativesDirPath);
+        } else {
+            // 兜底，放在倒数第二个位置
+            finalArgs.add(Math.max(1, finalArgs.size() - 1), "-Djava.library.path=" + nativesDirPath);
+        }
+
+        // 二次替换，确保占位符被替换完毕
+        for (int i = 0; i < finalArgs.size(); i++) {
+            String arg = finalArgs.get(i);
             if (arg.equals("${game_directory}")) {
-                finalArgs.add(gameDirPath);
+                finalArgs.set(i, gameDirPath);
             } else {
-                finalArgs.add(arg.replace("${game_directory}", gameDirPath));
+                finalArgs.set(i, arg.replace("${game_directory}", gameDirPath));
             }
         }
 
@@ -161,7 +190,6 @@ public class GameLauncher {
         pb.directory(isolateVersion ? versionDir : new File(baseDir));
         pb.redirectErrorStream(true);
 
-        // 🚨 保留最近 N 行输出，用于崩溃分析
         List<String> recentOutput = Collections.synchronizedList(new ArrayList<>());
 
         try {
@@ -177,7 +205,6 @@ public class GameLauncher {
                                 recentOutput.remove(0);
                             }
                         }
-                        // 🚨 不打印到控制台，保持启动器控制台干净
                     }
                 } catch (IOException ignored) {}
             }).start();
@@ -186,7 +213,6 @@ public class GameLauncher {
             LogManager.logLauncher("🛑 Minecraft 进程已退出，退出码: " + exitCode);
 
             if (exitCode != 0) {
-                // 🚨 崩溃分析：即使 exitCode == 1（游戏内部崩溃），也能给出建议
                 LogManager.logLauncher("🔍 开始崩溃日志分析...");
                 CrashAnalyzer.CrashReport report = CrashAnalyzer.analyze(versionId, recentOutput, baseDir);
                 if (report.matched) {
@@ -235,7 +261,7 @@ public class GameLauncher {
         }
     }
 
-    private static void addArguments(List<String> targetList, JsonArray argsArray, String nativesDirPath, String baseDir, String versionId, String playerName, String classpath, String assetsIndex, String offlineUUID, String osName) {
+    private static void addArguments(List<String> targetList, JsonArray argsArray, String nativesDirPath, String baseDir, String gameDirPath, String versionId, String playerName, String classpath, String assetsIndex, String offlineUUID, String osName) {
         if (argsArray == null) return;
         boolean skipNextArg = false;
 
@@ -246,7 +272,7 @@ public class GameLauncher {
                 if (arg.startsWith("--quickPlay")) { skipNextArg = true; continue; }
                 if (osName.equals("windows") && arg.contains("-XstartOnFirstThread")) continue;
 
-                targetList.add(replacePlaceholders(arg, playerName, versionId, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
+                targetList.add(replacePlaceholders(arg, playerName, versionId, gameDirPath, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
             }
             else if (el.isJsonObject()) {
                 JsonObject argObj = el.getAsJsonObject();
@@ -256,14 +282,14 @@ public class GameLauncher {
                             if (argObj.get("value").isJsonPrimitive()) {
                                 String val = argObj.get("value").getAsString();
                                 if (val.startsWith("--quickPlay")) continue;
-                                targetList.add(replacePlaceholders(val, playerName, versionId, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
+                                targetList.add(replacePlaceholders(val, playerName, versionId, gameDirPath, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
                             }
                             else if (argObj.get("value").isJsonArray()) {
                                 for (JsonElement v : argObj.getAsJsonArray("value")) {
                                     String val = v.getAsString();
                                     if (skipNextArg) { skipNextArg = false; continue; }
                                     if (val.startsWith("--quickPlay")) { skipNextArg = true; continue; }
-                                    targetList.add(replacePlaceholders(val, playerName, versionId, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
+                                    targetList.add(replacePlaceholders(val, playerName, versionId, gameDirPath, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
                                 }
                             }
                         }
@@ -271,10 +297,10 @@ public class GameLauncher {
                 } else {
                     if (argObj.has("value")) {
                         if (argObj.get("value").isJsonPrimitive()) {
-                            targetList.add(replacePlaceholders(argObj.get("value").getAsString(), playerName, versionId, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
+                            targetList.add(replacePlaceholders(argObj.get("value").getAsString(), playerName, versionId, gameDirPath, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
                         } else if (argObj.get("value").isJsonArray()) {
                             for (JsonElement v : argObj.getAsJsonArray("value")) {
-                                targetList.add(replacePlaceholders(v.getAsString(), playerName, versionId, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
+                                targetList.add(replacePlaceholders(v.getAsString(), playerName, versionId, gameDirPath, baseDir, assetsIndex, offlineUUID, classpath, nativesDirPath));
                             }
                         }
                     }
@@ -321,10 +347,10 @@ public class GameLauncher {
         return allowed;
     }
 
-    private static String replacePlaceholders(String arg, String playerName, String versionId, String baseDir, String assetsIndex, String offlineUUID, String classpath, String nativesDirPath) {
+    private static String replacePlaceholders(String arg, String playerName, String versionId, String gameDirPath, String baseDir, String assetsIndex, String offlineUUID, String classpath, String nativesDirPath) {
         return arg.replace("${auth_player_name}", playerName)
                 .replace("${version_name}", versionId)
-                .replace("${game_directory}", baseDir)
+                .replace("${game_directory}", gameDirPath)
                 .replace("${assets_root}", baseDir + "\\assets")
                 .replace("${assets_index_name}", assetsIndex)
                 .replace("${auth_uuid}", offlineUUID)

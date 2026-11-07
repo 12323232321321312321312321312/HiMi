@@ -41,6 +41,7 @@ public class ConfigManager {
             setup.put("playerId", "Steve");
             setup.put("selectedVersion", "未选择");
             setup.put("memory", 4096);
+            setup.put("isolateVersion", true); // 默认开启
             setup.put("minecraftDirs", dirs);
             saveFullSetup(setup);
         }
@@ -64,7 +65,7 @@ public class ConfigManager {
     }
 
     @SuppressWarnings("unchecked")
-    public static Map<String, Object> loadSetup() {
+    public static synchronized Map<String, Object> loadSetup() {
         File file = new File(CONFIG_DIR, "Setup.json");
         if (file.exists()) {
             try (FileReader reader = new FileReader(file)) {
@@ -76,7 +77,7 @@ public class ConfigManager {
         return new HashMap<>();
     }
 
-    public static void saveFullSetup(Map<String, Object> setup) {
+    public static synchronized void saveFullSetup(Map<String, Object> setup) {
         File file = new File(CONFIG_DIR, "Setup.json");
         try (FileWriter writer = new FileWriter(file)) {
             new GsonBuilder().setPrettyPrinting().create().toJson(setup, writer);
@@ -85,8 +86,7 @@ public class ConfigManager {
         }
     }
 
-    // 🚨 新增：只更新某一个键值对，绝不覆盖其他数据
-    public static void updateSingleConfig(String key, Object value) {
+    public static synchronized void updateSingleConfig(String key, Object value) {
         Map<String, Object> setup = loadSetup();
         setup.put(key, value);
         saveFullSetup(setup);

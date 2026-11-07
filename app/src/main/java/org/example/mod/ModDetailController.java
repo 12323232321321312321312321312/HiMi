@@ -68,11 +68,22 @@ public class ModDetailController {
 
         if (p.iconUrl != null && !p.iconUrl.isEmpty()) loadIconAsync(p.iconUrl);
 
+        // 🚨 修复 1：先设置下拉框的值，再填充数据
+        gvFilter.getItems().clear();
         gvFilter.getItems().add("全部");
         gvFilter.getItems().addAll(p.gameVersions);
+        
+        // 如果传进来的版本号在下拉列表里没有，为了防止 UI 为空，直接把它塞进去（因为下拉框是可编辑的）
+        if (defaultGv != null && !defaultGv.isEmpty() && !defaultGv.equals("全部") && !gvFilter.getItems().contains(defaultGv)) {
+            gvFilter.getItems().add(defaultGv);
+        }
         gvFilter.setValue(defaultGv != null && !defaultGv.isEmpty() ? defaultGv : "全部");
 
+        loaderFilter.getItems().clear();
         loaderFilter.getItems().addAll("全部", "fabric", "forge", "neoforge", "quilt");
+        if (defaultLoader != null && !defaultLoader.isEmpty() && !defaultLoader.equals("全部") && !loaderFilter.getItems().contains(defaultLoader)) {
+            loaderFilter.getItems().add(defaultLoader);
+        }
         loaderFilter.setValue(defaultLoader != null && !defaultLoader.isEmpty() ? defaultLoader : "全部");
 
         loadVersions();
@@ -98,10 +109,22 @@ public class ModDetailController {
                     List<String> gvs = gv.isEmpty() ? null : List.of(gv);
                     List<String> loaders = loader.isEmpty() ? null : List.of(loader);
                     JsonArray arr = ModrinthAPI.getProjectVersions(project.id, gvs, loaders);
+                    
+                    // 🚨 新增：如果没搜到，去掉过滤条件再搜一次，防止因为依赖项的标签太死板导致空列表
+                    if (arr.size() == 0 && (!gv.isEmpty() || !loader.isEmpty())) {
+                        arr = ModrinthAPI.getProjectVersions(project.id, null, null);
+                    }
+
                     for (var e : arr) list.add(ModVersion.fromModrinthJson(e.getAsJsonObject()));
                 } else {
                     int cfLoader = loader.isEmpty() ? 0 : getCfLoaderType(loader);
                     JsonArray arr = CurseForgeAPI.getModFiles(project.id, gv.isEmpty() ? null : gv, cfLoader);
+                    
+                    // 🚨 新增：如果没搜到，去掉过滤条件再搜一次
+                    if (arr.size() == 0 && (!gv.isEmpty() || cfLoader > 0)) {
+                        arr = CurseForgeAPI.getModFiles(project.id, null, 0);
+                    }
+
                     for (var e : arr) list.add(ModVersion.fromCurseForgeJson(e.getAsJsonObject()));
                 }
 
@@ -116,7 +139,7 @@ public class ModDetailController {
         }).start();
     }
 
-    // ================== 🚨 核心逻辑：点击查看依赖 ==================
+    // ================== 核心逻辑：点击查看依赖 ==================
     private void showDependenciesOnly(ModVersion selected) {
         statusLabel.setText("正在获取依赖详情...");
         new Thread(() -> {
@@ -200,7 +223,7 @@ public class ModDetailController {
         return selected;
     }
 
-    // 获取依赖的详细信息（包含图标、简介，构建完整的 ModProject 用于跳转）
+    // 获取依赖的详细信息
     private void fetchDependencyDetails(ModVersion version) {
         for (ModDependency d : version.dependencies) {
             if (d.projectId != null && !d.projectId.isEmpty() && !"0".equals(d.projectId)) {
@@ -241,7 +264,7 @@ public class ModDetailController {
         }
     }
 
-    // ================== 🚨 构建可点击的 UI ==================
+    // ================== 构建可点击的 UI ==================
     private VBox buildDependencyUI(ModVersion selected) {
         VBox root = new VBox(12);
         root.setPadding(new Insets(15));
@@ -294,34 +317,37 @@ public class ModDetailController {
     }
 
     private Node createDepNode(ModDependency d) {
-        // 特殊依赖（特定文件/版本）无法跳转，只能显示文字
         if (d.targetProject == null) {
             Label lbl = new Label("  • " + getDepDisplayName(d));
             lbl.setStyle("-fx-text-fill: #666; -fx-font-size: 13px;");
             return lbl;
         }
 
-        // 普通依赖，创建超链接
         Hyperlink link = new Hyperlink("  • " + getDepDisplayName(d));
         link.setStyle("-fx-text-fill: #2196F3; -fx-font-size: 13px; -fx-underline: true; -fx-padding: 0; -fx-cursor: hand;");
         
-        // 🚨 点击跳转到新窗口
         link.setOnAction(e -> openDependencyDetailWindow(d.targetProject));
         
         return link;
     }
 
+    // 🚨 修复 2：跳转依赖页时，把当前页面的游戏版本和加载器带过去
     private void openDependencyDetailWindow(ModProject targetProject) {
         try {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/mod_detail.fxml"));
             Parent root = loader.load();
             ModDetailController controller = loader.getController();
-            controller.setProject(targetProject, "", ""); // 传入空字符串表示不预设过滤
+            
+            // 获取当前页面的过滤条件
+            String currentGv = getComboValue(gvFilter);
+            String currentLoader = getComboValue(loaderFilter);
+            
+            // 传给依赖页
+            controller.setProject(targetProject, currentGv, currentLoader);
             
             Stage stage = new Stage();
             stage.setTitle(targetProject.title + " - HiMi");
             stage.setScene(new Scene(root));
-            // 不用模态，这样你可以同时开着好几个详情页对照查看
             stage.initModality(Modality.NONE); 
             stage.show();
         } catch (Exception ex) {
@@ -345,7 +371,13 @@ public class ModDetailController {
         boolean isolate = Boolean.TRUE.equals(setup.get("isolateVersion"));
         String baseDir = ConfigManager.DEFAULT_MC_DIR;
         String versionId = (String) setup.get("selectedVersion");
-        File modsDir = isolate ? new File(baseDir, "versions/" + versionId + "/mods") : new File(baseDir, "mods");
+        
+        File modsDir;
+        if (isolate && versionId != null && !versionId.equals("未选择") && !versionId.isEmpty()) {
+            modsDir = new File(baseDir, "versions/" + versionId + "/mods");
+        } else {
+            modsDir = new File(baseDir, "mods");
+        }
         modsDir.mkdirs();
 
         new Thread(() -> {
